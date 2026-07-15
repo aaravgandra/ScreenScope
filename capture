@@ -1,0 +1,88 @@
+"""
+Stage 0 — Screenshot capture.
+
+Takes a URL, loads it in a headless browser, and saves a full-page (or
+viewport) screenshot to disk. Used both by the manual collection script
+and by the live demo app.
+
+Usage:
+    python src/capture.py https://example.com --out data/screenshots/example.png
+"""
+import argparse
+import os
+import time
+from pathlib import Path
+
+from playwright.sync_api import sync_playwright
+
+
+def capture_screenshot(
+    url: str,
+    out_path: str,
+    viewport_only: bool = True,
+    width: int = 1440,
+    height: int = 1024,
+    wait_ms: int = 2000,
+) -> str:
+    """
+    Capture a screenshot of `url` and save it to `out_path`.
+
+    viewport_only=True captures just the visible viewport, which is usually
+    what you want for cookie banners / checkout modals (full-page screenshots
+    of long pages make bounding boxes harder to reason about and the eventual
+    LLM call more expensive). Set False for full-page capture.
+    """
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": width, "height": height})
+        page.goto(url, wait_until="networkidle", timeout=30000)
+        # give cookie banners / dynamic content time to render
+        time.sleep(wait_ms / 1000)
+        page.screenshot(path=out_path, full_page=not viewport_only)
+        browser.close()
+
+    return out_path
+
+
+def batch_capture(url_list_path: str, out_dir: str) -> list[str]:
+    """
+    Capture screenshots for every URL in a text file (one URL per line).
+    Filenames are derived from the URL. Skips URLs that fail rather than
+    aborting the whole batch — logs failures to stderr.
+    """
+    saved = []
+    with open(url_list_path) as f:
+        urls = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+
+    for i, url in enumerate(urls):
+        safe_name = url.replace("https://", "").replace("http://", "")
+        safe_name = safe_name.replace("/", "_").replace(":", "_")[:80]
+        out_path = os.path.join(out_dir, f"{i:03d}_{safe_name}.png")
+        try:
+            capture_screenshot(url, out_path)
+            saved.append(out_path)
+            print(f"[ok] {url} -> {out_path}")
+        except Exception as e:
+            print(f"[fail] {url}: {e}")
+
+    return saved
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("url", nargs="?", help="Single URL to capture")
+    parser.add_argument("--out", default="data/screenshots/capture.png")
+    parser.add_argument("--batch", help="Path to a text file of URLs, one per line")
+    parser.add_argument("--out-dir", default="data/screenshots")
+    parser.add_argument("--full-page", action="store_true")
+    args = parser.parse_args()
+
+    if args.batch:
+        batch_capture(args.batch, args.out_dir)
+    elif args.url:
+        path = capture_screenshot(args.url, args.out, viewport_only=not args.full_page)
+        print(f"Saved: {path}")
+    else:
+        parser.error("Provide a URL or --batch <file>")
