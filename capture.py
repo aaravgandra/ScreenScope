@@ -1,3 +1,6 @@
+pip install playwright
+import subprocess 
+subprocess.run(["playwright", "install"])
 """
 Stage 0 — Screenshot capture.
 
@@ -12,11 +15,13 @@ import argparse
 import os
 import time
 from pathlib import Path
+import sys # Import sys to access command-line arguments
+import asyncio # Import asyncio for async operations
 
-from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright # Change to async_playwright
 
 
-def capture_screenshot(
+async def capture_screenshot( # Make function async
     url: str,
     out_path: str,
     viewport_only: bool = True,
@@ -34,19 +39,19 @@ def capture_screenshot(
     """
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page(viewport={"width": width, "height": height})
-        page.goto(url, wait_until="networkidle", timeout=30000)
+    async with async_playwright() as p: # Use async with and async_playwright
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page(viewport={"width": width, "height": height})
+        await page.goto(url, wait_until="networkidle", timeout=30000)
         # give cookie banners / dynamic content time to render
-        time.sleep(wait_ms / 1000)
-        page.screenshot(path=out_path, full_page=not viewport_only)
-        browser.close()
+        await asyncio.sleep(wait_ms / 1000) # Use asyncio.sleep
+        await page.screenshot(path=out_path, full_page=not viewport_only)
+        await browser.close()
 
     return out_path
 
 
-def batch_capture(url_list_path: str, out_dir: str) -> list[str]:
+async def batch_capture(url_list_path: str, out_dir: str) -> list[str]: # Make function async
     """
     Capture screenshots for every URL in a text file (one URL per line).
     Filenames are derived from the URL. Skips URLs that fail rather than
@@ -61,7 +66,7 @@ def batch_capture(url_list_path: str, out_dir: str) -> list[str]:
         safe_name = safe_name.replace("/", "_").replace(":", "_")[:80]
         out_path = os.path.join(out_dir, f"{i:03d}_{safe_name}.png")
         try:
-            capture_screenshot(url, out_path)
+            await capture_screenshot(url, out_path) # await the async function
             saved.append(out_path)
             print(f"[ok] {url} -> {out_path}")
         except Exception as e:
@@ -72,17 +77,30 @@ def batch_capture(url_list_path: str, out_dir: str) -> list[str]:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("url", nargs="?", help="Single URL to capture")
+    parser.add_argument("--url", help="Single URL to capture") # Changed from positional to optional flag
     parser.add_argument("--out", default="data/screenshots/capture.png")
     parser.add_argument("--batch", help="Path to a text file of URLs, one per line")
     parser.add_argument("--out-dir", default="data/screenshots")
     parser.add_argument("--full-page", action="store_true")
-    args = parser.parse_args()
+
+    # Use parse_known_args to handle unknown arguments passed by the Colab kernel
+    # and only parse the arguments defined for the script.
+    args, unknown = parser.parse_known_args(sys.argv[1:])
 
     if args.batch:
-        batch_capture(args.batch, args.out_dir)
+        asyncio.run(batch_capture(args.batch, args.out_dir)) # Run async batch_capture
     elif args.url:
-        path = capture_screenshot(args.url, args.out, viewport_only=not args.full_page)
+        path = asyncio.run(capture_screenshot(args.url, args.out, viewport_only=not args.full_page)) # Run async capture_screenshot
         print(f"Saved: {path}")
     else:
-        parser.error("Provide a URL or --batch <file>")
+        # If no URL or batch is provided, run a default example for demonstration
+        print("No URL or batch file provided. Running a default example capture of Google.com.")
+        default_url = "https://www.google.com"
+        default_output = "data/screenshots/google_capture.png"
+        path = asyncio.run(capture_screenshot(default_url, default_output, viewport_only=True)) # Run async capture_screenshot
+        print(f"Default example saved: {path}")
+    !apt-get update && apt-get install -y libxcomposite1
+    !apt-get update && apt-get install -y libatk-bridge2.0-0
+    pip install nest_asyncio
+    import nest_asyncio
+nest_asyncio.apply()
