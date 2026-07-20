@@ -1,16 +1,7 @@
 pip install playwright
 import subprocess 
 subprocess.run(["playwright", "install"])
-"""
-Stage 0 — Screenshot capture.
 
-Takes a URL, loads it in a headless browser, and saves a full-page (or
-viewport) screenshot to disk. Used both by the manual collection script
-and by the live demo app.
-
-Usage:
-    python src/capture.py https://example.com --out data/screenshots/example.png
-"""
 import argparse
 import os
 import time
